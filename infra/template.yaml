@@ -1,0 +1,91 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Small authenticated notes API on Lambda, behind a public function URL.
+
+Parameters:
+  CodeBucket:
+    Type: String
+  CodeKey:
+    Type: String
+  DemoPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    Default: PremanDemo123!
+  TokenTtlSeconds:
+    Type: String
+    Default: "900"
+
+Resources:
+  # Retained so a redeploy does not invalidate every token already issued.
+  AuthSigningSecret:
+    Type: AWS::SecretsManager::Secret
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Description: Signing key for the PreMan notes demo API.
+      GenerateSecretString:
+        SecretStringTemplate: "{}"
+        GenerateStringKey: auth_secret
+        PasswordLength: 64
+        ExcludePunctuation: true
+      Tags:
+        - Key: application
+          Value: test-authenticated-app
+
+  ApiRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  ApiFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Architectures:
+        - arm64
+      Runtime: python3.12
+      Handler: app.main.handler
+      Role: !GetAtt ApiRole.Arn
+      MemorySize: 512
+      Timeout: 30
+      Code:
+        S3Bucket: !Ref CodeBucket
+        S3Key: !Ref CodeKey
+      Environment:
+        Variables:
+          AUTH_SECRET: !Sub "{{resolve:secretsmanager:${AuthSigningSecret}:SecretString:auth_secret}}"
+          DEMO_EMAIL: demo@preman.live
+          DEMO_PASSWORD: !Ref DemoPassword
+          TOKEN_TTL_SECONDS: !Ref TokenTtlSeconds
+      Tags:
+        - Key: application
+          Value: test-authenticated-app
+
+  ApiFunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      AuthType: NONE
+      InvokeMode: BUFFERED
+      TargetFunctionArn: !GetAtt ApiFunction.Arn
+
+  PublicFunctionUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunctionUrl
+      FunctionName: !Ref ApiFunction
+      FunctionUrlAuthType: NONE
+      Principal: "*"
+
+Outputs:
+  ApiUrl:
+    Description: Public URL for the notes API.
+    Value: !GetAtt ApiFunctionUrl.FunctionUrl
+  FunctionName:
+    Value: !Ref ApiFunction
