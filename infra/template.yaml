@@ -75,12 +75,23 @@ Resources:
       InvokeMode: BUFFERED
       TargetFunctionArn: !GetAtt ApiFunction.Arn
 
+  # Both statements are needed. The first lets an anonymous caller address the
+  # function URL; the second lets the URL actually invoke the function behind
+  # it. With only the first, every request comes back 403.
   PublicFunctionUrlPermission:
     Type: AWS::Lambda::Permission
     Properties:
       Action: lambda:InvokeFunctionUrl
       FunctionName: !Ref ApiFunction
       FunctionUrlAuthType: NONE
+      Principal: "*"
+
+  PublicInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref ApiFunction
+      InvokedViaFunctionUrl: true
       Principal: "*"
 
 Outputs:

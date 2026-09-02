@@ -16,7 +16,8 @@ mkdir -p build/lambda
 
 # arm64 wheels only: the function runs on Graviton, and a source build here
 # would produce a bundle that imports fine locally and not at all in Lambda.
-pip install \
+PYTHON="${PYTHON:-python3}"
+"$PYTHON" -m pip install \
   --quiet \
   --requirement requirements.txt \
   --target build/lambda \
